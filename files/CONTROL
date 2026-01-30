@@ -12,8 +12,8 @@ densvar     	10
 seeds        	14 1 2022
 
 ###SIMULATION RUN ############################################## 
-timestep	        0.001                     
-steps		        1000                     
+timestep	        0.001                   
+steps		        10000                     
 temperature             3.0000E+02                     
 pressure	        0.0000E+00                     
 ensemble nvt hoover     1.0                   
