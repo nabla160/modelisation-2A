@@ -2,3 +2,11 @@ IP 10.32.153.22
 
 login: MOD
 password: 26modi20
+PuTTY
+
+dlpoly.sh gougougagak
+
+thermoDynamics.py
+
+calculateMSD.py C
+calculateMSD.py H
