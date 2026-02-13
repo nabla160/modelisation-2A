@@ -4,7 +4,7 @@
 #        VARIABLES À MODIFIER ICI
 # ==========================================
 SIM_NAME="somename"       # Argument passé à dlpoly.sh
-NB_SIMS=10                # Nombre total de simulations à lancer
+NB_SIMS=20                # Nombre total de simulations à lancer
 # ==========================================
 
 # Récupération automatique des noms de dossiers
