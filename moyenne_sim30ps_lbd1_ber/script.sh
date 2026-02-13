@@ -1,52 +1,54 @@
 #!/bin/bash
 
 # ==========================================
-#        CONFIGURATION (Facile à modifier)
+#        CONFIGURATION
 # ==========================================
-SIM_NAME="somename"         # L'argument pour dlpoly.sh
-NB_SIMS=10                  # Nombre de simulations (tu as 58 coeurs, c'est large)
-SCRIPT_DL="dlpoly.sh"       # Le nom du script de simulation
+SIM_NAME="somename"         
+NB_SIMS=10                  
+SCRIPT_DL="dlpoly.sh"       
 # ==========================================
 
-# Récupère le nom du dossier où se trouve ce script (le modèle)
-MODELE_DIR=$(cd "$(dirname "$0")" && pwd)
-MODELE_NAME=$(basename "$MODELE_DIR")
+# On reste dans le dossier actuel
+MODELE_DIR=$(pwd)
 
-echo "--- Script Linux de Simulation ---"
-echo "Modèle détecté : $MODELE_NAME"
-
-# On remonte d'un étage pour créer les copies à côté du modèle
-cd ..
+echo "--- Script Linux de Simulation (Mode Sous-Dossiers) ---"
+echo "Les résultats seront créés ici : $MODELE_DIR"
 
 for i in $(seq 1 $NB_SIMS)
 do
-    RUN_DIR="${MODELE_NAME}_run_$i"
+    # Nom du sous-dossier
+    RUN_DIR="run_$i"
     
-    # Nettoyage si le dossier existe déjà (évite les erreurs)
+    # Nettoyage si le sous-dossier existe déjà
     rm -rf "$RUN_DIR"
     
-    # Copie propre du modèle
-    cp -r "$MODELE_NAME" "$RUN_DIR"
+    # On crée le sous-dossier
+    mkdir -p "$RUN_DIR"
     
-    # Lancement en arrière-plan (parallélisation sur tes coeurs)
+    # On copie tout le contenu du modèle (sauf les dossiers run déjà créés) 
+    # dans le sous-dossier
+    # On utilise find pour éviter de copier les dossiers "run_" dans eux-mêmes
+    find . -maxdepth 1 ! -name "$RUN_DIR" ! -name "run_*" ! -name "." -exec cp -t "$RUN_DIR" -r {} + 2>/dev/null
+
+    # Calcul de l'ID du coeur (0 à 9)
+    CPU_ID=$((i - 1))
+    
     (
         cd "$RUN_DIR" || exit
         chmod +x "$SCRIPT_DL"
         
-        echo "[Run $i] Simulation démarrée..."
+        echo "[Run $i] Lancé dans ./$RUN_DIR sur le cœur CPU $CPU_ID"
         
-        # Exécution : on capture tout dans un log pour ne pas polluer l'écran
-        ./"$SCRIPT_DL" "$SIM_NAME" > "run.log" 2>&1
+        # Exécution fixée sur le cœur choisi
+        taskset -c $CPU_ID ./"$SCRIPT_DL" "$SIM_NAME" > "run.log" 2>&1
         
-        echo "[Run $i] Terminé avec succès."
+        echo "[Run $i] Terminé."
     ) &
 done
 
 echo "----------------------------------------------------"
-echo "Les $NB_SIMS simulations tournent sur tes coeurs."
-echo "Pour voir l'activité : tape 'top' puis la touche '1'."
+echo "Les $NB_SIMS simulations tournent en sous-dossiers."
 echo "----------------------------------------------------"
 
-# Attente de la fin de tous les processus fils
 wait
-echo "Bravo : toutes les simulations sont finies."
+echo "Toutes les simulations sont finies."
