@@ -68,6 +68,10 @@ for j in "${!LAMBDAS[@]}"; do
         cp "${TEMPLATE_DIR}/DL_ALBNAT"      "${RUN_DIR}/"
         cp dlpoly.sh                        "${RUN_DIR}/"
 
+        # Graine unique pour chaque run (évite des trajectoires identiques)
+        SEED=$(( j * NB_RUNS + i + 1337 ))
+        sed -i "s/^seeds.*/seeds        ${SEED} 1 2022/" "${RUN_DIR}/CONTROL"
+
         # Génération du FIELD avec B scalé par lambda
         # Remplace le dernier champ des lignes C-O et H-O (potentiel 12-6)
         # sed -E : extended regex (compatible macOS/BSD et GNU)
