@@ -18,6 +18,16 @@ set -euo pipefail
 TEMPLATE_DIR="files10ps10xlambda"
 OUTPUT_DIR="lambda_scan"
 NB_RUNS=5
+LOG_FILE="lambda_scan.log"
+
+# Redirige stdout et stderr vers le terminal ET le fichier log
+mkdir -p "${OUTPUT_DIR}"
+exec > >(tee -a "${LOG_FILE}") 2>&1
+
+# Logue les erreurs avec contexte
+trap 'echo "[$(date "+%Y-%m-%d %H:%M:%S")] ERREUR ligne $LINENO : \"$BASH_COMMAND\" (code $?)"' ERR
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Démarrage du scan"
 
 # Paramètres B de référence à lambda = 1.0 (FIELD.original)
 C_O_B_REF=1807.0
@@ -35,8 +45,6 @@ for dep in "${TEMPLATE_DIR}/CONFIG" "${TEMPLATE_DIR}/CONTROL" \
         exit 1
     fi
 done
-
-mkdir -p "${OUTPUT_DIR}"
 
 echo "======================================================"
 echo " Lambda scan : ${#LAMBDAS[@]} valeurs × ${NB_RUNS} runs"
@@ -82,7 +90,7 @@ for j in "${!LAMBDAS[@]}"; do
         cd "${RUN_DIR}" || exit 1
         chmod +x DL_ALBNAT
 
-        echo "[λ=${lambda} run ${i}] Démarré..."
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [λ=${lambda} run ${i}] Démarré..."
 
         # Simulation DL_POLY
         dlpoly.sh "lbd${lambda}_r${i}" > run.log 2>&1
@@ -92,7 +100,7 @@ for j in "${!LAMBDAS[@]}"; do
         calculateMSD.py C  >> run.log 2>&1
         calculateMSD.py H  >> run.log 2>&1
 
-        echo "[λ=${lambda} run ${i}] Terminé."
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [λ=${lambda} run ${i}] Terminé."
 
         cd - > /dev/null
 
@@ -103,4 +111,5 @@ echo ""
 echo "======================================================"
 echo " Toutes les simulations sont terminées."
 echo " Résultats dans : ${OUTPUT_DIR}/"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Scan terminé."
 echo "======================================================"
