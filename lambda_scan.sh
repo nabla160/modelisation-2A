@@ -3,7 +3,7 @@
 #  lambda_scan.sh  —  Scan du paramètre lambda pour DL_POLY (benzène / ZSM-5)
 #
 #  Lance 10 valeurs de lambda (0.10 … 1.00), 5 runs indépendants chacune,
-#  soit 50 simulations en parallèle (1 cœur dédié par job).
+#  soit 50 simulations séquentielles.
 #
 #  Prérequis (dans le dossier courant au lancement) :
 #    - dlpoly.sh          : script de lancement DL_POLY (non versionné)
@@ -40,7 +40,7 @@ mkdir -p "${OUTPUT_DIR}"
 
 echo "======================================================"
 echo " Lambda scan : ${#LAMBDAS[@]} valeurs × ${NB_RUNS} runs"
-echo " Total : $(( ${#LAMBDAS[@]} * NB_RUNS )) simulations en parallèle"
+echo " Total : $(( ${#LAMBDAS[@]} * NB_RUNS )) simulations séquentielles"
 echo "======================================================"
 
 for j in "${!LAMBDAS[@]}"; do
@@ -54,7 +54,6 @@ for j in "${!LAMBDAS[@]}"; do
     mkdir -p "${LAMBDA_DIR}"
 
     for i in $(seq 1 ${NB_RUNS}); do
-        CPU_ID=$(( j * NB_RUNS + (i - 1) ))   # cœurs 0 … 49
         RUN_DIR="${LAMBDA_DIR}/run_${i}"
 
         # Nettoyage si le dossier existe déjà
@@ -79,30 +78,27 @@ for j in "${!LAMBDAS[@]}"; do
             -e "s/(H       O       12-6     1\.599E5 +)[0-9.]+/\1${H_O_B}/" \
             "${TEMPLATE_DIR}/FIELD.original" > "${RUN_DIR}/FIELD"
 
-        # Lancement en arrière-plan sur le cœur dédié
-        (
-            cd "${RUN_DIR}" || exit 1
-            chmod +x DL_ALBNAT
+        # Lancement séquentiel
+        cd "${RUN_DIR}" || exit 1
+        chmod +x DL_ALBNAT
 
-            echo "[λ=${lambda} run ${i}] Démarré sur cœur ${CPU_ID}"
+        echo "[λ=${lambda} run ${i}] Démarré..."
 
-            # Simulation DL_POLY
-            taskset -c "${CPU_ID}" dlpoly.sh "lbd${lambda}_r${i}" > run.log 2>&1
+        # Simulation DL_POLY
+        dlpoly.sh "lbd${lambda}_r${i}" > run.log 2>&1
 
-            # Analyses post-simulation
-            thermoDynamics.py  >> run.log 2>&1
-            calculateMSD.py C  >> run.log 2>&1
-            calculateMSD.py H  >> run.log 2>&1
+        # Analyses post-simulation
+        thermoDynamics.py  >> run.log 2>&1
+        calculateMSD.py C  >> run.log 2>&1
+        calculateMSD.py H  >> run.log 2>&1
 
-            echo "[λ=${lambda} run ${i}] Terminé."
-        ) &
+        echo "[λ=${lambda} run ${i}] Terminé."
+
+        cd - > /dev/null
 
     done
 done
 
-echo ""
-echo "50 simulations lancées. En attente de la fin..."
-wait
 echo ""
 echo "======================================================"
 echo " Toutes les simulations sont terminées."
