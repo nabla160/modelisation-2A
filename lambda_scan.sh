@@ -28,7 +28,7 @@ LAMBDAS=("0.10" "0.20" "0.30" "0.40" "0.50" "0.60" "0.70" "0.80" "0.90" "1.00")
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Vérification des prérequis
-for dep in dlpoly.sh "${TEMPLATE_DIR}/CONFIG" "${TEMPLATE_DIR}/CONTROL" \
+for dep in "${TEMPLATE_DIR}/CONFIG" "${TEMPLATE_DIR}/CONTROL" \
            "${TEMPLATE_DIR}/FIELD.original" "${TEMPLATE_DIR}/DL_ALBNAT"; do
     if [[ ! -e "${dep}" ]]; then
         echo "ERREUR : fichier requis introuvable → ${dep}" >&2
@@ -66,7 +66,6 @@ for j in "${!LAMBDAS[@]}"; do
         cp "${TEMPLATE_DIR}/CONTROL"        "${RUN_DIR}/"
         cp "${TEMPLATE_DIR}/FIELD.original" "${RUN_DIR}/"
         cp "${TEMPLATE_DIR}/DL_ALBNAT"      "${RUN_DIR}/"
-        cp dlpoly.sh                        "${RUN_DIR}/"
 
         # Graine unique pour chaque run (évite des trajectoires identiques)
         SEED=$(( j * NB_RUNS + i + 1337 ))
@@ -83,12 +82,12 @@ for j in "${!LAMBDAS[@]}"; do
         # Lancement en arrière-plan sur le cœur dédié
         (
             cd "${RUN_DIR}" || exit 1
-            chmod +x dlpoly.sh DL_ALBNAT
+            chmod +x DL_ALBNAT
 
             echo "[λ=${lambda} run ${i}] Démarré sur cœur ${CPU_ID}"
 
             # Simulation DL_POLY
-            taskset -c "${CPU_ID}" ./dlpoly.sh "lbd${lambda}_r${i}" > run.log 2>&1
+            taskset -c "${CPU_ID}" dlpoly.sh "lbd${lambda}_r${i}" > run.log 2>&1
 
             # Analyses post-simulation
             thermoDynamics.py  >> run.log 2>&1
