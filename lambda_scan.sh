@@ -7,7 +7,7 @@
 #
 #  Prérequis (dans le dossier courant au lancement) :
 #    - dlpoly.sh          : script de lancement DL_POLY (non versionné)
-#    - files10ps10xlambda/ : contient CONFIG, CONTROL, FIELD.original, DL_ALBNAT
+#    - modele_sim/         : contient CONFIG, CONTROL, FIELD.original, DL_ALBNAT
 #
 #  Usage : ./lambda_scan.sh
 # =============================================================================
@@ -15,7 +15,7 @@
 set -euo pipefail
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-TEMPLATE_DIR="files10ps10xlambda"
+TEMPLATE_DIR="modele_sim"
 OUTPUT_DIR="lambda_scan"
 NB_RUNS=5
 LOG_FILE="lambda_scan.log"
