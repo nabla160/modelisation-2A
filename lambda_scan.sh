@@ -3,7 +3,7 @@
 #  lambda_scan.sh  —  Scan du paramètre lambda pour DL_POLY (benzène / ZSM-5)
 #
 #  Lance 10 valeurs de lambda (0.10 … 1.00), 5 runs indépendants chacune,
-#  soit 50 simulations avec 8 cœurs par job (12 jobs simultanés max sur 100 cœurs).
+#  soit 50 simulations avec 4 cœurs par job (25 jobs simultanés max sur 100 cœurs).
 #
 #  Prérequis (dans le dossier courant au lancement) :
 #    - dlpoly.sh          : script de lancement DL_POLY (non versionné)
@@ -19,9 +19,9 @@ TEMPLATE_DIR="files10ps10xlambda"
 OUTPUT_DIR="lambda_scan"
 NB_RUNS=5
 LOG_FILE="lambda_scan.log"
-CORES_PER_JOB=8
+CORES_PER_JOB=4
 TOTAL_CORES=100
-MAX_JOBS=$(( TOTAL_CORES / CORES_PER_JOB ))   # 12 jobs simultanés
+MAX_JOBS=$(( TOTAL_CORES / CORES_PER_JOB ))   # 25 jobs simultanés
 
 # Auto-détachement : rend la main immédiatement si lancé en premier plan
 if [[ "${LAMBDA_SCAN_DETACHED:-0}" != "1" ]]; then
@@ -116,7 +116,7 @@ for j in "${!LAMBDAS[@]}"; do
             log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${TAG} $*"; }
 
             log "Simulation DL_POLY démarrée..."
-            if taskset -c "${CPU_START}-${CPU_END}" dlpoly.sh "lbd${lambda}_r${i}" 8 > run.log 2>&1; then
+            if taskset -c "${CPU_START}-${CPU_END}" dlpoly.sh "lbd${lambda}_r${i}" 4 > run.log 2>&1; then
                 log "Simulation DL_POLY terminée."
             else
                 log "ERREUR : DL_POLY a échoué (code $?) — voir run.log"
