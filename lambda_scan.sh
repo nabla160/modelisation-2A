@@ -3,7 +3,7 @@
 #  lambda_scan.sh  —  Scan du paramètre lambda pour DL_POLY (benzène / ZSM-5)
 #
 #  Lance 10 valeurs de lambda (0.10 … 1.00), 5 runs indépendants chacune,
-#  soit 50 simulations en parallèle (1 cœur dédié par job).
+#  soit 50 simulations avec 8 cœurs par job (12 jobs simultanés max sur 100 cœurs).
 #
 #  Prérequis (dans le dossier courant au lancement) :
 #    - dlpoly.sh          : script de lancement DL_POLY (non versionné)
@@ -19,6 +19,9 @@ TEMPLATE_DIR="files10ps10xlambda"
 OUTPUT_DIR="lambda_scan"
 NB_RUNS=5
 LOG_FILE="lambda_scan.log"
+CORES_PER_JOB=8
+TOTAL_CORES=100
+MAX_JOBS=$(( TOTAL_CORES / CORES_PER_JOB ))   # 12 jobs simultanés
 
 # Auto-détachement : rend la main immédiatement si lancé en premier plan
 if [[ "${LAMBDA_SCAN_DETACHED:-0}" != "1" ]]; then
@@ -72,7 +75,14 @@ for j in "${!LAMBDAS[@]}"; do
     mkdir -p "${LAMBDA_DIR}"
 
     for i in $(seq 1 ${NB_RUNS}); do
-        CPU_ID=$(( j * NB_RUNS + (i - 1) ))   # cœurs 0 … 49
+        # File d'attente : attend qu'un slot se libère
+        while [[ $(jobs -r | wc -l) -ge ${MAX_JOBS} ]]; do
+            wait -n 2>/dev/null || true
+        done
+
+        JOB_IDX=$(( j * NB_RUNS + (i - 1) ))
+        CPU_START=$(( (JOB_IDX % MAX_JOBS) * CORES_PER_JOB ))
+        CPU_END=$(( CPU_START + CORES_PER_JOB - 1 ))   # plages 0-7, 8-15, … 88-95 (cyclique)
         RUN_DIR="${LAMBDA_DIR}/run_${i}"
         SEED=$(( j * NB_RUNS + i + 1337 ))
 
@@ -95,7 +105,7 @@ for j in "${!LAMBDAS[@]}"; do
             -e "s/(H       O       12-6     1\.599E5 +)[0-9.]+/\1${H_O_B}/" \
             "${TEMPLATE_DIR}/FIELD.original" > "${RUN_DIR}/FIELD"
 
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [λ=${lambda} run ${i}] Préparé (seed=${SEED}, cœur=${CPU_ID})"
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [λ=${lambda} run ${i}] Préparé (seed=${SEED}, cœurs=${CPU_START}-${CPU_END})"
 
         # Lancement en arrière-plan sur le cœur dédié
         (
@@ -106,7 +116,7 @@ for j in "${!LAMBDAS[@]}"; do
             log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${TAG} $*"; }
 
             log "Simulation DL_POLY démarrée..."
-            if taskset -c "${CPU_ID}" dlpoly.sh "lbd${lambda}_r${i}" > run.log 2>&1; then
+            if taskset -c "${CPU_START}-${CPU_END}" dlpoly.sh "lbd${lambda}_r${i}" 8 > run.log 2>&1; then
                 log "Simulation DL_POLY terminée."
             else
                 log "ERREUR : DL_POLY a échoué (code $?) — voir run.log"
