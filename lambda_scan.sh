@@ -116,10 +116,22 @@ for j in "${!LAMBDAS[@]}"; do
             log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${TAG} $*"; }
 
             log "Simulation DL_POLY démarrée..."
-            if taskset -c "${CPU_START}-${CPU_END}" dlpoly.sh "lbd${lambda}_r${i}" 4 > run.log 2>&1; then
+            taskset -c "${CPU_START}-${CPU_END}" dlpoly.sh "lbd${lambda}_r${i}" 4 >> run.log 2>&1 || true
+
+            # dlpoly.sh retourne immédiatement et écrit le PID dans last_launched_job
+            # On attend le process DL_POLY réel avant de continuer
+            if [[ -f last_launched_job ]]; then
+                dlpoly_pid=$(awk '{print $2}' last_launched_job)
+                if [[ -n "${dlpoly_pid}" ]] && kill -0 "${dlpoly_pid}" 2>/dev/null; then
+                    log "En attente du process DL_POLY (PID=${dlpoly_pid})..."
+                    while kill -0 "${dlpoly_pid}" 2>/dev/null; do sleep 5; done
+                fi
+            fi
+
+            if [[ -f OUTPUT ]]; then
                 log "Simulation DL_POLY terminée."
             else
-                log "ERREUR : DL_POLY a échoué (code $?) — voir run.log"
+                log "ERREUR : DL_POLY a échoué (fichier OUTPUT absent) — voir run.log"
                 exit 1
             fi
 
