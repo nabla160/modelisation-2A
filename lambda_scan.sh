@@ -3,7 +3,7 @@
 #  lambda_scan.sh  —  Scan du paramètre lambda pour DL_POLY (benzène / ZSM-5)
 #
 #  Lance 10 valeurs de lambda (0.10 … 1.00), 5 runs indépendants chacune,
-#  soit 50 simulations séquentielles.
+#  soit 50 simulations en parallèle (1 cœur dédié par job).
 #
 #  Prérequis (dans le dossier courant au lancement) :
 #    - dlpoly.sh          : script de lancement DL_POLY (non versionné)
@@ -20,9 +20,17 @@ OUTPUT_DIR="lambda_scan"
 NB_RUNS=5
 LOG_FILE="lambda_scan.log"
 
-# Redirige stdout et stderr vers le terminal ET le fichier log
-mkdir -p "${OUTPUT_DIR}"
-exec > >(tee -a "${LOG_FILE}") 2>&1
+# Auto-détachement : rend la main immédiatement si lancé en premier plan
+if [[ "${LAMBDA_SCAN_DETACHED:-0}" != "1" ]]; then
+    mkdir -p "${OUTPUT_DIR}"
+    LAMBDA_SCAN_DETACHED=1 nohup "$0" "$@" >> "${LOG_FILE}" 2>&1 &
+    echo "Scan lancé en arrière-plan (PID $!)."
+    echo "Suivez la progression : tail -f ${LOG_FILE}"
+    exit 0
+fi
+
+# Redirige stdout et stderr vers le fichier log
+exec >> "${LOG_FILE}" 2>&1
 
 # Logue les erreurs avec contexte
 trap 'echo "[$(date "+%Y-%m-%d %H:%M:%S")] ERREUR ligne $LINENO : \"$BASH_COMMAND\" (code $?)"' ERR
@@ -48,7 +56,7 @@ done
 
 echo "======================================================"
 echo " Lambda scan : ${#LAMBDAS[@]} valeurs × ${NB_RUNS} runs"
-echo " Total : $(( ${#LAMBDAS[@]} * NB_RUNS )) simulations séquentielles"
+echo " Total : $(( ${#LAMBDAS[@]} * NB_RUNS )) simulations en parallèle"
 echo "======================================================"
 
 for j in "${!LAMBDAS[@]}"; do
@@ -58,11 +66,15 @@ for j in "${!LAMBDAS[@]}"; do
     C_O_B=$(awk -v l="${lambda}" -v b="${C_O_B_REF}" 'BEGIN { printf "%.4f", l*b }')
     H_O_B=$(awk -v l="${lambda}" -v b="${H_O_B_REF}" 'BEGIN { printf "%.4f", l*b }')
 
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [λ=${lambda}] C_O_B=${C_O_B}  H_O_B=${H_O_B}"
+
     LAMBDA_DIR="${OUTPUT_DIR}/lambda_${lambda}"
     mkdir -p "${LAMBDA_DIR}"
 
     for i in $(seq 1 ${NB_RUNS}); do
+        CPU_ID=$(( j * NB_RUNS + (i - 1) ))   # cœurs 0 … 49
         RUN_DIR="${LAMBDA_DIR}/run_${i}"
+        SEED=$(( j * NB_RUNS + i + 1337 ))
 
         # Nettoyage si le dossier existe déjà
         rm -rf "${RUN_DIR}"
@@ -75,38 +87,62 @@ for j in "${!LAMBDAS[@]}"; do
         cp "${TEMPLATE_DIR}/DL_ALBNAT"      "${RUN_DIR}/"
 
         # Graine unique pour chaque run (évite des trajectoires identiques)
-        SEED=$(( j * NB_RUNS + i + 1337 ))
         sed -i "s/^seeds.*/seeds        ${SEED} 1 2022/" "${RUN_DIR}/CONTROL"
 
         # Génération du FIELD avec B scalé par lambda
-        # Remplace le dernier champ des lignes C-O et H-O (potentiel 12-6)
-        # sed -E : extended regex (compatible macOS/BSD et GNU)
         sed -E \
             -e "s/(C       O       12-6     1\.335E6 +)[0-9.]+/\1${C_O_B}/" \
             -e "s/(H       O       12-6     1\.599E5 +)[0-9.]+/\1${H_O_B}/" \
             "${TEMPLATE_DIR}/FIELD.original" > "${RUN_DIR}/FIELD"
 
-        # Lancement séquentiel
-        cd "${RUN_DIR}" || exit 1
-        chmod +x DL_ALBNAT
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [λ=${lambda} run ${i}] Préparé (seed=${SEED}, cœur=${CPU_ID})"
 
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [λ=${lambda} run ${i}] Démarré..."
+        # Lancement en arrière-plan sur le cœur dédié
+        (
+            TAG="[λ=${lambda} run ${i}]"
+            cd "${RUN_DIR}" || exit 1
+            chmod +x DL_ALBNAT
 
-        # Simulation DL_POLY
-        dlpoly.sh "lbd${lambda}_r${i}" > run.log 2>&1
+            log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${TAG} $*"; }
 
-        # Analyses post-simulation
-        thermoDynamics.py  >> run.log 2>&1
-        calculateMSD.py C  >> run.log 2>&1
-        calculateMSD.py H  >> run.log 2>&1
+            log "Simulation DL_POLY démarrée..."
+            if taskset -c "${CPU_ID}" dlpoly.sh "lbd${lambda}_r${i}" > run.log 2>&1; then
+                log "Simulation DL_POLY terminée."
+            else
+                log "ERREUR : DL_POLY a échoué (code $?) — voir run.log"
+                exit 1
+            fi
 
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [λ=${lambda} run ${i}] Terminé."
+            log "Analyse thermodynamique..."
+            if thermoDynamics.py >> run.log 2>&1; then
+                log "thermoDynamics.py OK."
+            else
+                log "ERREUR : thermoDynamics.py a échoué (code $?) — voir run.log"
+            fi
 
-        cd - > /dev/null
+            log "Calcul MSD (C)..."
+            if calculateMSD.py C >> run.log 2>&1; then
+                log "calculateMSD.py C OK."
+            else
+                log "ERREUR : calculateMSD.py C a échoué (code $?) — voir run.log"
+            fi
+
+            log "Calcul MSD (H)..."
+            if calculateMSD.py H >> run.log 2>&1; then
+                log "calculateMSD.py H OK."
+            else
+                log "ERREUR : calculateMSD.py H a échoué (code $?) — voir run.log"
+            fi
+
+            log "Run complet."
+        ) &
 
     done
 done
 
+echo ""
+echo "50 simulations lancées. En attente de la fin..."
+wait
 echo ""
 echo "======================================================"
 echo " Toutes les simulations sont terminées."
