@@ -13,13 +13,13 @@ seeds        	14 1 2022
 
 ###SIMULATION RUN ############################################## 
 timestep	        0.001                   
-steps		        13334
+steps		        133340
 temperature             3.0000E+02                     
 pressure	        0.0000E+00                     
 ensemble nvt hoover     1.0                   
 
 ###POSTRUN ##################################################### 
-traj      	        0 500 0
+traj      	        0 5000 0
 print		        5
 stats		        5
 
